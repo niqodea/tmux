@@ -1740,16 +1740,22 @@ grid_unwrap_position(struct grid *gd, u_int *px, u_int *py, u_int wx, u_int wy)
 	*py = yy;
 }
 
-/* Get length of line. */
+/*
+ * Get length of line, without trailing spaces unless the line wraps: then they
+ * are part of the text, which continues on the next line.
+ */
 u_int
 grid_line_length(struct grid *gd, u_int py)
 {
-	struct grid_cell	gc;
-	u_int			px;
+	struct grid_line	*gl = grid_get_line(gd, py);
+	struct grid_cell	 gc;
+	u_int			 px;
 
-	px = grid_get_line(gd, py)->cellsize;
+	px = gl->cellsize;
 	if (px > gd->sx)
 		px = gd->sx;
+	if (gl->flags & GRID_LINE_WRAPPED)
+		return (px);
 	while (px > 0) {
 		grid_get_cell(gd, px - 1, py, &gc);
 		if ((gc.flags & GRID_FLAG_PADDING) ||
