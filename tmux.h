@@ -879,6 +879,7 @@ struct colour_palette {
 #define GRID_LINE_START_OUTPUT 0x40
 #define GRID_LINE_END_OUTPUT 0x80
 #define GRID_LINE_HYPERLINK 0x100
+#define GRID_LINE_WORDWRAP 0x200 /* wraps at spaces, set by OSC 2029 */
 
 /* All OSC 133 flags. */
 #define GRID_LINE_OSC133_FLAGS \
@@ -3636,6 +3637,7 @@ char	*grid_string_cells(struct grid *, u_int, u_int, u_int,
 void	 grid_duplicate_lines(struct grid *, u_int, struct grid *, u_int,
 	     u_int);
 void	 grid_reflow(struct grid *, u_int);
+u_int	 grid_wrap_word(struct grid *, u_int);
 void	 grid_wrap_position(struct grid *, u_int, u_int, u_int *, u_int *);
 void	 grid_unwrap_position(struct grid *, u_int *, u_int *, u_int, u_int);
 u_int	 grid_line_length(struct grid *, u_int);

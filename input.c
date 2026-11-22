@@ -179,6 +179,7 @@ static void	input_osc_110(struct input_ctx *, const char *);
 static void	input_osc_111(struct input_ctx *, const char *);
 static void	input_osc_112(struct input_ctx *, const char *);
 static void	input_osc_133(struct input_ctx *, const char *);
+static void	input_osc_2029(struct input_ctx *, const char *);
 static void	input_osc_7501(struct input_ctx *, const char *);
 
 /* Transition entry/exit handlers. */
@@ -2843,6 +2844,9 @@ input_exit_osc(struct input_ctx *ictx)
 	case 133:
 		input_osc_133(ictx, p);
 		break;
+	case 2029:
+		input_osc_2029(ictx, p);
+		break;
 	case 7501:
 		input_osc_7501(ictx, p);
 		break;
@@ -3583,6 +3587,28 @@ input_fire_command_event(struct window_pane *wp, const char *name)
 	}
 
 	events_fire(name, ep);
+}
+
+/*
+ * Handle the OSC 2029 sequence: the cursor's line wraps at spaces rather than
+ * at the edge, when written and on resize. 2029 is Unicode's paragraph
+ * separator. It marks the line rather than setting a mode, as OSC 133 marks a
+ * prompt, so it holds only for the lines a program means and no program can
+ * leave it on; it lasts until the line is erased. A ? asks whether it is
+ * supported, as OSC 10 and 11 report their colour.
+ */
+static void
+input_osc_2029(struct input_ctx *ictx, const char *p)
+{
+	struct screen	*s = ictx->ctx.s;
+	struct grid	*gd = s->grid;
+	const char	*end;
+
+	if (strcmp(p, "?") == 0) {
+		end = ictx->input_end == INPUT_END_BEL ? "\007" : "\033\\";
+		input_reply(ictx, 1, "\033]2029;1%s", end);
+	} else if (*p == '\0')
+		grid_get_line(gd, gd->hsize + s->cy)->flags |= GRID_LINE_WORDWRAP;
 }
 
 /* Handle the OSC 133 sequence. */

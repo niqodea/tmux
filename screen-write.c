@@ -2923,6 +2923,30 @@ screen_write_collect_multiple(struct screen_write_ctx *ctx,
 	return (n);
 }
 
+/*
+ * After a word-wrapped line wraps, move the word the edge cut to the new line.
+ * The word is already on the terminal, so redraw the pane.
+ */
+static void
+screen_write_wrap_word(struct screen_write_ctx *ctx)
+{
+	struct screen		*s = ctx->s;
+	struct grid		*gd = s->grid;
+	u_int			 py = gd->hsize + s->cy;
+	int			 flags;
+
+	if (py == 0)
+		return;
+	flags = grid_get_line(gd, py - 1)->flags;
+	if (~flags & GRID_LINE_WRAPPED || ~flags & GRID_LINE_WORDWRAP)
+		return;
+
+	grid_get_line(gd, py)->flags |= GRID_LINE_WORDWRAP;
+	screen_write_set_cursor(ctx, grid_wrap_word(gd, py - 1), -1);
+	if (ctx->wp != NULL)
+		ctx->wp->flags |= PANE_REDRAW;
+}
+
 /* Write cell data, collecting if necessary. */
 void
 screen_write_collect_add(struct screen_write_ctx *ctx,
@@ -2973,6 +2997,7 @@ screen_write_collect_add(struct screen_write_ctx *ctx,
 		ci->wrapped = 1;
 		screen_write_linefeed(ctx, 1, 8);
 		screen_write_set_cursor(ctx, 0, -1);
+		screen_write_wrap_word(ctx);
 	}
 
 	if (ci->used == 0)
@@ -3026,6 +3051,7 @@ screen_write_cell1(struct screen_write_ctx *ctx, const struct grid_cell *gc,
 		log_debug("%s: wrapped at %u,%u", __func__, s->cx, s->cy);
 		screen_write_linefeed(ctx, 1, 8);
 		screen_write_set_cursor(ctx, 0, -1);
+		screen_write_wrap_word(ctx);
 		screen_write_collect_flush(ctx, 0, __func__);
 	}
 

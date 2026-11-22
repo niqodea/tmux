@@ -80,6 +80,7 @@ static int	window_copy_visible_has_images(struct window_copy_mode_data *);
 static char    *window_copy_match_at_cursor(struct window_copy_mode_data *);
 static void	window_copy_scroll_to(struct window_mode_entry *, u_int, u_int,
 		    int);
+static u_int	window_copy_search_width(struct grid *, u_int);
 static int	window_copy_search_compare(struct grid *, u_int, u_int,
 		    struct grid *, u_int, int);
 static int	window_copy_search_lr(struct grid *, struct grid *, u_int *,
@@ -4375,6 +4376,18 @@ window_copy_scroll_to(struct window_mode_entry *wme, u_int px, u_int py,
 		window_copy_redraw_screen(wme);
 }
 
+/*
+ * Get the width of a line for a search: the length of its text if it wraps,
+ * which is the edge unless it wrapped at a space, else the whole line.
+ */
+static u_int
+window_copy_search_width(struct grid *gd, u_int py)
+{
+	if (grid_get_line(gd, py)->flags & GRID_LINE_WRAPPED)
+		return (grid_line_length(gd, py));
+	return (gd->sx);
+}
+
 static int
 window_copy_search_compare(struct grid *gd, u_int px, u_int py,
     struct grid *sgd, u_int spx, int cis)
@@ -4415,11 +4428,12 @@ window_copy_search_lr(struct grid *gd, struct grid *sgd, u_int *ppx, u_int py,
 			px = ax + bx + padding;
 			pywrap = py;
 			/* Wrap line. */
-			while (px >= gd->sx && pywrap < endline) {
+			while (px >= window_copy_search_width(gd, pywrap) &&
+			    pywrap < endline) {
 				gl = grid_get_line(gd, pywrap);
 				if (~gl->flags & GRID_LINE_WRAPPED)
 					break;
-				px -= gd->sx;
+				px -= window_copy_search_width(gd, pywrap);
 				pywrap++;
 			}
 			/* We have run off the end of the grid. */
@@ -4459,11 +4473,12 @@ window_copy_search_rl(struct grid *gd,
 			px = ax - 1 + bx + padding;
 			pywrap = py;
 			/* Wrap line. */
-			while (px >= gd->sx && pywrap < endline) {
+			while (px >= window_copy_search_width(gd, pywrap) &&
+			    pywrap < endline) {
 				gl = grid_get_line(gd, pywrap);
 				if (~gl->flags & GRID_LINE_WRAPPED)
 					break;
-				px -= gd->sx;
+				px -= window_copy_search_width(gd, pywrap);
 				pywrap++;
 			}
 			/* We have run off the end of the grid. */
@@ -4511,8 +4526,9 @@ window_copy_search_lr_regex(struct grid *gd, u_int *ppx, u_int *psx, u_int py,
 	/* Need to look at the entire string. */
 	buf = xmalloc(size);
 	buf[0] = '\0';
-	buf = window_copy_stringify(gd, py, first, gd->sx, buf, &size);
-	len = gd->sx - first;
+	buf = window_copy_stringify(gd, py, first,
+	    window_copy_search_width(gd, py), buf, &size);
+	len = window_copy_search_width(gd, py) - first;
 	endline = gd->hsize + gd->sy - 1;
 	pywrap = py;
 	while (buf != NULL &&
@@ -4522,8 +4538,9 @@ window_copy_search_lr_regex(struct grid *gd, u_int *ppx, u_int *psx, u_int py,
 		if (~gl->flags & GRID_LINE_WRAPPED)
 			break;
 		pywrap++;
-		buf = window_copy_stringify(gd, pywrap, 0, gd->sx, buf, &size);
-		len += gd->sx;
+		buf = window_copy_stringify(gd, pywrap, 0,
+		    window_copy_search_width(gd, pywrap), buf, &size);
+		len += window_copy_search_width(gd, pywrap);
 	}
 
 	if (regexec(reg, buf, 1, &regmatch, eflags) == 0 &&
@@ -4570,8 +4587,9 @@ window_copy_search_rl_regex(struct grid *gd, u_int *ppx, u_int *psx, u_int py,
 	/* Need to look at the entire string. */
 	buf = xmalloc(size);
 	buf[0] = '\0';
-	buf = window_copy_stringify(gd, py, first, gd->sx, buf, &size);
-	len = gd->sx - first;
+	buf = window_copy_stringify(gd, py, first,
+	    window_copy_search_width(gd, py), buf, &size);
+	len = window_copy_search_width(gd, py) - first;
 	endline = gd->hsize + gd->sy - 1;
 	pywrap = py;
 	while (buf != NULL &&
@@ -4581,8 +4599,9 @@ window_copy_search_rl_regex(struct grid *gd, u_int *ppx, u_int *psx, u_int py,
 		if (~gl->flags & GRID_LINE_WRAPPED)
 			break;
 		pywrap++;
-		buf = window_copy_stringify(gd, pywrap, 0, gd->sx, buf, &size);
-		len += gd->sx;
+		buf = window_copy_stringify(gd, pywrap, 0,
+		    window_copy_search_width(gd, pywrap), buf, &size);
+		len += window_copy_search_width(gd, pywrap);
 	}
 
 	if (window_copy_last_regex(gd, py, first, last, len, ppx, psx, buf,
@@ -4768,7 +4787,7 @@ window_copy_cstrtocellpos(struct grid *gd, u_int ncells, u_int *ppx, u_int *ppy,
 		    &cells[cell].dlen, &cells[cell].allocated);
 		cell++;
 		px++;
-		if (px == gd->sx) {
+		if (px == window_copy_search_width(gd, pywrap)) {
 			px = 0;
 			pywrap++;
 			gl = grid_peek_line(gd, pywrap);
@@ -6816,7 +6835,6 @@ window_copy_copy_line_length(struct window_mode_entry *wme, u_int sy,
 	struct window_copy_mode_data	*data = wme->data;
 	struct grid			*gd = data->backing->grid;
 	struct grid_line		*gl = grid_get_line(gd, sy);
-	u_int				 length;
 	int				 line_wrapped;
 
 	line_wrapped = 0;
@@ -6824,11 +6842,7 @@ window_copy_copy_line_length(struct window_mode_entry *wme, u_int sy,
 		line_wrapped = 1;
 	if (wrapped != NULL)
 		*wrapped = line_wrapped;
-	if (line_wrapped)
-		length = gl->cellsize;
-	else
-		length = window_copy_find_length(wme, sy);
-	return (length);
+	return (window_copy_find_length(wme, sy));
 }
 
 static void

@@ -171,7 +171,7 @@ grid_reader_handle_wrap(struct grid_reader *gr, u_int *xx, u_int *yy)
 		grid_reader_cursor_down(gr);
 
 		if (grid_get_line(gr->gd, gr->cy)->flags & GRID_LINE_WRAPPED)
-			*xx = gr->gd->sx - 1;
+			*xx = grid_reader_line_length(gr) - 1;
 		else
 			*xx = grid_reader_line_length(gr);
 	}
@@ -193,7 +193,7 @@ grid_reader_cursor_next_word(struct grid_reader *gr, const char *separators)
 
 	/* Do not break up wrapped words. */
 	if (grid_get_line(gr->gd, gr->cy)->flags & GRID_LINE_WRAPPED)
-		xx = gr->gd->sx - 1;
+		xx = grid_reader_line_length(gr) - 1;
 	else
 		xx = grid_reader_line_length(gr);
 	yy = gr->gd->hsize + gr->gd->sy - 1;
@@ -238,7 +238,7 @@ grid_reader_cursor_next_word_end(struct grid_reader *gr, const char *separators)
 
 	/* Do not break up wrapped words. */
 	if (grid_get_line(gr->gd, gr->cy)->flags & GRID_LINE_WRAPPED)
-		xx = gr->gd->sx - 1;
+		xx = grid_reader_line_length(gr) - 1;
 	else
 		xx = grid_reader_line_length(gr);
 	yy = gr->gd->hsize + gr->gd->sy - 1;

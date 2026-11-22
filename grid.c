@@ -1592,6 +1592,91 @@ grid_reflow_split(struct grid *target, struct grid *gd, u_int sx, u_int yy,
 		grid_reflow_join(target, gd, sx, yy, width, 1);
 }
 
+/*
+ * Move the word that a wrap cut at the end of a line, everything after its
+ * last space, to the start of the next line, and end the line after the space,
+ * as a reflow ends a line it splits. The space stays, so copies and reflows
+ * keep it, and a word that ends at the edge moves too when a space follows it.
+ * Return how many cells moved: none if the line has no space or ends with one.
+ */
+u_int
+grid_wrap_word(struct grid *gd, u_int py)
+{
+	struct grid_line	*gl = &gd->linedata[py];
+	struct grid_cell	 gc;
+	u_int			 x, n, i;
+
+	for (x = gl->cellused; x > 0; x--) {
+		grid_get_cell1(gl, x - 1, &gc);
+		if (~gc.flags & GRID_FLAG_PADDING &&
+		    gc.data.size == 1 && *gc.data.data == ' ')
+			break;
+	}
+	if (x == 0 || x == gl->cellused)
+		return (0);
+	n = gl->cellused - x;
+
+	for (i = 0; i < n; i++) {
+		grid_get_cell1(gl, x + i, &gc);
+		grid_set_cell(gd, i, py + 1, &gc);
+	}
+	gl->cellsize = gl->cellused = x;
+	return (n);
+}
+
+/*
+ * Lay out a word-wrapped line again as a whole: copy its cells across, and
+ * at the edge wrap its last word to a new line.
+ */
+static void
+grid_reflow_words(struct grid *target, struct grid *gd, u_int sx, u_int yy)
+{
+	struct grid_line	*gl = &gd->linedata[yy], *to;
+	struct grid_cell	 gc;
+	u_int			 first = yy, start = target->sy, line = start;
+	u_int			 xx = 0, i, from, into;
+	int			 wrapped;
+
+	to = grid_reflow_add(target, 1);
+	to->flags = gl->flags & ~GRID_LINE_WRAPPED;
+	to->time = gl->time;
+	to->osc133_data = gl->osc133_data;
+
+	for (;;) {
+		gl = &gd->linedata[yy];
+		for (i = 0; i < gl->cellused; i++) {
+			grid_get_cell1(gl, i, &gc);
+			if (xx + gc.data.width > sx) {
+				target->linedata[line].flags |= GRID_LINE_WRAPPED;
+				grid_reflow_add(target, 1)->flags =
+				    GRID_LINE_WORDWRAP;
+				xx = grid_wrap_word(target, line);
+				line++;
+			}
+			grid_set_cell(target, xx++, line, &gc);
+		}
+		wrapped = gl->flags & GRID_LINE_WRAPPED;
+		free(gl->celldata);
+		free(gl->extddata);
+		grid_reflow_dead(gl);
+		if (!wrapped || yy + 1 == gd->hsize + gd->sy)
+			break;
+		yy++;
+	}
+
+	/* Adjust the scroll position by the change in lines, as split does. */
+	from = yy + 1 - first;
+	into = line + 1 - start;
+	if (first < gd->hscrolled) {
+		if (into >= from)
+			gd->hscrolled += into - from;
+		else if (gd->hscrolled - first > from - into)
+			gd->hscrolled -= from - into;
+		else
+			gd->hscrolled = first;
+	}
+}
+
 /* Reflow lines on grid to new width. */
 void
 grid_reflow(struct grid *gd, u_int sx)
@@ -1621,6 +1706,11 @@ grid_reflow(struct grid *gd, u_int sx)
 			continue;
 		}
 #endif
+
+		if (gl->flags & GRID_LINE_WORDWRAP) {
+			grid_reflow_words(target, gd, sx, yy);
+			continue;
+		}
 
 		/*
 		 * Work out the width of this line. at is the point at which
