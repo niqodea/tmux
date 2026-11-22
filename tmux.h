@@ -3637,10 +3637,12 @@ char	*grid_string_cells(struct grid *, u_int, u_int, u_int,
 void	 grid_duplicate_lines(struct grid *, u_int, struct grid *, u_int,
 	     u_int);
 void	 grid_reflow(struct grid *, u_int);
+int	 grid_cell_is_space(const struct grid_cell *);
 u_int	 grid_wrap_word(struct grid *, u_int);
 void	 grid_wrap_position(struct grid *, u_int, u_int, u_int *, u_int *);
 void	 grid_unwrap_position(struct grid *, u_int *, u_int *, u_int, u_int);
 u_int	 grid_line_length(struct grid *, u_int);
+u_int	 grid_line_hanging(struct grid *, u_int);
 u_int	 grid_line_limit(struct grid *, u_int);
 int	 grid_in_set(struct grid *, u_int, u_int, const char *);
 

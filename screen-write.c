@@ -2947,6 +2947,30 @@ screen_write_wrap_word(struct screen_write_ctx *ctx)
 		ctx->wp->flags |= PANE_REDRAW;
 }
 
+/*
+ * On a line wrapped at spaces, hang a space that does not fit past the edge
+ * rather than wrap. It takes no column, so the cursor stays at the edge.
+ */
+static int
+screen_write_hang_space(struct screen_write_ctx *ctx,
+    const struct grid_cell *gc)
+{
+	struct screen		*s = ctx->s;
+	struct grid		*gd = s->grid;
+	struct grid_line	*gl = grid_get_line(gd, gd->hsize + s->cy);
+	u_int			 px;
+
+	if (~s->mode & MODE_WRAP || ~gl->flags & GRID_LINE_WORDWRAP)
+		return (0);
+	if (!grid_cell_is_space(gc))
+		return (0);
+	px = gl->cellused;
+	if (px < screen_size_x(s))
+		px = screen_size_x(s);
+	grid_set_cell(gd, px, gd->hsize + s->cy, gc);
+	return (1);
+}
+
 /* Write cell data, collecting if necessary. */
 void
 screen_write_collect_add(struct screen_write_ctx *ctx,
@@ -2993,6 +3017,8 @@ screen_write_collect_add(struct screen_write_ctx *ctx,
 	ci = ctx->item; /* may have changed */
 
 	if (s->cx > sx - 1) {
+		if (screen_write_hang_space(ctx, gc))
+			return;
 		log_debug("%s: wrapped at %u,%u", __func__, s->cx, s->cy);
 		ci->wrapped = 1;
 		screen_write_linefeed(ctx, 1, 8);
@@ -3048,6 +3074,8 @@ screen_write_cell1(struct screen_write_ctx *ctx, const struct grid_cell *gc,
 
 	/* Check this will fit on the current line and wrap if not. */
 	if ((s->mode & MODE_WRAP) && s->cx > sx - width) {
+		if (screen_write_hang_space(ctx, gc))
+			return;
 		log_debug("%s: wrapped at %u,%u", __func__, s->cx, s->cy);
 		screen_write_linefeed(ctx, 1, 8);
 		screen_write_set_cursor(ctx, 0, -1);

@@ -4437,7 +4437,8 @@ window_copy_search_lr(struct grid *gd, struct grid *sgd, u_int *ppx, u_int py,
 				pywrap++;
 			}
 			/* We have run off the end of the grid. */
-			if (px - padding >= gd->sx)
+			if (px - padding >=
+			    gd->sx + grid_line_hanging(gd, pywrap))
 				break;
 
 			grid_get_cell(gd, px, pywrap, &gc);
@@ -4482,7 +4483,8 @@ window_copy_search_rl(struct grid *gd,
 				pywrap++;
 			}
 			/* We have run off the end of the grid. */
-			if (px - padding >= gd->sx)
+			if (px - padding >=
+			    gd->sx + grid_line_hanging(gd, pywrap))
 				break;
 
 			grid_get_cell(gd, px, pywrap, &gc);
@@ -6838,7 +6840,8 @@ window_copy_copy_line_length(struct window_mode_entry *wme, u_int sy,
 	int				 line_wrapped;
 
 	line_wrapped = 0;
-	if ((gl->flags & GRID_LINE_WRAPPED) && gl->cellsize <= gd->sx)
+	if ((gl->flags & GRID_LINE_WRAPPED) &&
+	    gl->cellsize <= gd->sx + grid_line_hanging(gd, sy))
 		line_wrapped = 1;
 	if (wrapped != NULL)
 		*wrapped = line_wrapped;
@@ -6862,6 +6865,9 @@ window_copy_copy_line(struct window_mode_entry *wme, char **buf, size_t *off,
 
 	xx = window_copy_copy_line_length(wme, sy, &wrapped);
 	if (ex > xx)
+		ex = xx;
+	/* A copy to the edge takes the spaces that hang past it. */
+	if (ex >= gd->sx)
 		ex = xx;
 	if (sx > xx)
 		sx = xx;

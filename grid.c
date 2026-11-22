@@ -720,6 +720,11 @@ grid_clear(struct grid *gd, u_int px, u_int py, u_int nx, u_int ny, u_int bg)
 	for (yy = py; yy < py + ny; yy++) {
 		gl = &gd->linedata[yy];
 
+		/* The spaces that hang past the edge end the line. */
+		if ((gl->flags & GRID_LINE_WORDWRAP) &&
+		    px + nx >= gd->sx && gl->cellused > gd->sx)
+			gl->cellsize = gl->cellused = gd->sx;
+
 		sx = gd->sx;
 		if (sx > gl->cellsize)
 			sx = gl->cellsize;
@@ -1592,12 +1597,20 @@ grid_reflow_split(struct grid *target, struct grid *gd, u_int sx, u_int yy,
 		grid_reflow_join(target, gd, sx, yy, width, 1);
 }
 
+/* Is this cell a space, where a line wrapped at spaces may wrap? */
+int
+grid_cell_is_space(const struct grid_cell *gc)
+{
+	return ((gc->flags & (GRID_FLAG_PADDING|GRID_FLAG_TAB)) == 0 &&
+	    gc->data.width == 1 && gc->data.size == 1 && *gc->data.data == ' ');
+}
+
 /*
  * Move the word that a wrap cut at the end of a line, everything after its
  * last space, to the start of the next line, and end the line after the space,
  * as a reflow ends a line it splits. The space stays, so copies and reflows
- * keep it, and a word that ends at the edge moves too when a space follows it.
- * Return how many cells moved: none if the line has no space or ends with one.
+ * keep it. Return how many cells moved: none if the line has no space or ends
+ * with one, as it does when a space hangs past the edge.
  */
 u_int
 grid_wrap_word(struct grid *gd, u_int py)
@@ -1608,8 +1621,7 @@ grid_wrap_word(struct grid *gd, u_int py)
 
 	for (x = gl->cellused; x > 0; x--) {
 		grid_get_cell1(gl, x - 1, &gc);
-		if (~gc.flags & GRID_FLAG_PADDING &&
-		    gc.data.size == 1 && *gc.data.data == ' ')
+		if (grid_cell_is_space(&gc))
 			break;
 	}
 	if (x == 0 || x == gl->cellused)
@@ -1625,8 +1637,9 @@ grid_wrap_word(struct grid *gd, u_int py)
 }
 
 /*
- * Lay out a word-wrapped line again as a whole: copy its cells across, and
- * at the edge wrap its last word to a new line.
+ * Lay out a word-wrapped line again as a whole: copy its cells across, hang a
+ * space that does not fit past the edge, and wrap at the edge a word that does
+ * not fit, moving it to a new line.
  */
 static void
 grid_reflow_words(struct grid *target, struct grid *gd, u_int sx, u_int yy)
@@ -1646,7 +1659,8 @@ grid_reflow_words(struct grid *target, struct grid *gd, u_int sx, u_int yy)
 		gl = &gd->linedata[yy];
 		for (i = 0; i < gl->cellused; i++) {
 			grid_get_cell1(gl, i, &gc);
-			if (xx + gc.data.width > sx) {
+			if (xx + gc.data.width > sx &&
+			    !grid_cell_is_space(&gc)) {
 				target->linedata[line].flags |= GRID_LINE_WRAPPED;
 				grid_reflow_add(target, 1)->flags =
 				    GRID_LINE_WORDWRAP;
@@ -1832,7 +1846,8 @@ grid_unwrap_position(struct grid *gd, u_int *px, u_int *py, u_int wx, u_int wy)
 
 /*
  * Get length of line, without trailing spaces unless the line wraps: then they
- * are part of the text, which continues on the next line.
+ * are part of the text, which continues on the next line, and so are the
+ * spaces that hang past the edge of a line wrapped at spaces.
  */
 u_int
 grid_line_length(struct grid *gd, u_int py)
@@ -1844,8 +1859,11 @@ grid_line_length(struct grid *gd, u_int py)
 	px = gl->cellsize;
 	if (px > gd->sx)
 		px = gd->sx;
-	if (gl->flags & GRID_LINE_WRAPPED)
+	if (gl->flags & GRID_LINE_WRAPPED) {
+		if (px == gd->sx)
+			px += grid_line_hanging(gd, py);
 		return (px);
+	}
 	while (px > 0) {
 		grid_get_cell(gd, px - 1, py, &gc);
 		if ((gc.flags & GRID_FLAG_PADDING) ||
@@ -1855,6 +1873,29 @@ grid_line_length(struct grid *gd, u_int py)
 		px--;
 	}
 	return (px);
+}
+
+/*
+ * Get how many spaces hang past the edge of a line wrapped at spaces. A space
+ * that does not fit hangs there rather than wrap, as CSS white-space: pre-wrap
+ * hangs it, so a word that ends at the edge stays on its row. The space stays
+ * part of the line's text, but takes no column and is never drawn.
+ */
+u_int
+grid_line_hanging(struct grid *gd, u_int py)
+{
+	struct grid_line	*gl = grid_get_line(gd, py);
+	struct grid_cell	 gc;
+	u_int			 px;
+
+	if (~gl->flags & GRID_LINE_WORDWRAP)
+		return (0);
+	for (px = gd->sx; px < gl->cellused; px++) {
+		grid_get_cell(gd, px, py, &gc);
+		if (!grid_cell_is_space(&gc))
+			break;
+	}
+	return (px - gd->sx);
 }
 
 /* Get last position on line, not including padding. */

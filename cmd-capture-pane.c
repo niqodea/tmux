@@ -258,7 +258,7 @@ cmd_capture_pane_history(struct args *args, struct cmdq_item *item,
 	int				 n, join_lines, number_lines, flags = 0;
 	int				 show_flags, show_time, hyperlinks;
 	u_int				*links = NULL, nlinks = 0;
-	u_int				 i, sx, top, bottom, tmp;
+	u_int				 i, sx, nx, top, bottom, tmp;
 	char				*cause, *buf = NULL, *line, b[64], *cp;
 	const char			*Sflag, *Eflag;
 	size_t				 linelen;
@@ -349,7 +349,11 @@ cmd_capture_pane_history(struct args *args, struct cmdq_item *item,
 			line = cmd_capture_pane_hyperlinks(gd, s, i, links,
 			    &nlinks, &linelen);
 		} else {
-			line = grid_string_cells(gd, 0, i, sx, &gc, flags, s);
+			/* A joined line keeps the spaces that hang. */
+			nx = sx;
+			if (join_lines)
+				nx += grid_line_hanging(gd, i);
+			line = grid_string_cells(gd, 0, i, nx, &gc, flags, s);
 			linelen = strlen(line);
 		}
 		if (hyperlinks && linelen == 0) {
