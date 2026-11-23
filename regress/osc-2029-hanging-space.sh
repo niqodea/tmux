@@ -54,6 +54,8 @@ check reflowed "$expected" "$(rows)"
 
 check joined 'the quick brown fox jumps over the lazy dog|one two three   four' \
     "$($TMUX capture-pane -pJ -S- | grep . | paste -sd'|' -)"
+check trailing 'the quick brown |one two three   ' \
+    "$($TMUX capture-pane -pN -S- | sed -n '1p;4p' | paste -sd'|' -)"
 
 $TMUX copy-mode || fail "copy-mode failed"
 $TMUX send-keys -X history-top

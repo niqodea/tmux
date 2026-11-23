@@ -349,9 +349,12 @@ cmd_capture_pane_history(struct args *args, struct cmdq_item *item,
 			line = cmd_capture_pane_hyperlinks(gd, s, i, links,
 			    &nlinks, &linelen);
 		} else {
-			/* A joined line keeps the spaces that hang. */
+			/*
+			 * Keeping trailing spaces keeps the spaces that hang,
+			 * which are trailing spaces past the edge.
+			 */
 			nx = sx;
-			if (join_lines)
+			if (join_lines || args_has(args, 'N'))
 				nx += grid_line_hanging(gd, i);
 			line = grid_string_cells(gd, 0, i, nx, &gc, flags, s);
 			linelen = strlen(line);
