@@ -40,13 +40,13 @@ $TMUX new-session -d -x17 -y8 "
     printf '\033]2029\033\\\\the quick brown fox jumps over the lazy dog\n'
     stty raw -echo
     printf '\033]2029;?\033\\\\'
-    dd bs=1 count=10 2>/dev/null | od -An -c | tr -s ' ' >$TMP
+    dd bs=1 count=10 2>/dev/null >$TMP
     exec cat" || fail "new-session failed"
 $TMUX set-option -g window-size manual || fail "set size failed"
 $TMUX set-window-option -g mode-keys vi || fail "set mode-keys failed"
 sleep 1
 check written 'the quick brown|fox jumps over|the lazy dog' "$(rows)"
-check reply ' 033 ] 2 0 2 9 ; 1 033 \' "$(cat $TMP)"
+printf '\033]2029;1\033\\' | cmp -s - $TMP || fail "reply: expected ESC ]2029;1 ESC \\, got $(od -An -c $TMP)"
 
 $TMUX resize-window -x12
 sleep 1
